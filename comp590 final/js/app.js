@@ -3,16 +3,23 @@ console.log("✅ app.js loaded, D3 version:", d3.version);
 
 // DOM references
 const mapSvg       = d3.select("#map");
-const scatterSvg   = d3.select("#scatter");
 const tooltip      = d3.select("#tooltip");
 const detailsTitle = d3.select("#county-title");
 const detailsBox   = d3.select("#county-details");
 
+const scatterSvgs = {
+  income: d3.select("#scatter-income-svg"),
+  poverty: d3.select("#scatter-poverty-svg"),
+  education: d3.select("#scatter-education-svg")
+};
+
 let scatterData = [];
+let currentTab = "income";
+let selectedCountyName = null;
 
 // Load CSV + GeoJSON
 Promise.all([
-  d3.csv("data/NC_D3_Data.csv"),
+  d3.csv("data/NC_County_Data.csv"),
   d3.json("data/nc-counties.geojson")
 ]).then(([rows, geo]) => {
     console.log("✅ Promise resolved");
@@ -28,6 +35,7 @@ console.log("GeoJSON features:", geo.features ? geo.features.length : "NO FEATUR
     d.TotalPop18plus       = +d["TotalPop18plus"];
     d.MedianIncome         = +d["MedianIncome"];
     d.PovertyRate          = +d["PovertyRate"];
+    d.BAplusPercent        = +d["BAplusPercent"];        // education %
     d.CountyFIPS           = d["CountyFIPS"].toString().padStart(5, "0"); // e.g. 37001
   });
 
@@ -75,7 +83,8 @@ console.log("GeoJSON features:", geo.features ? geo.features.length : "NO FEATUR
   const color = d3.scaleSequential(d3.interpolateReds).domain(depExtent);
 
   drawMap(counties, byFips, getFipsFromFeature, path, color, depExtent);
-  drawScatter(rows);
+  drawAllScatters(rows);
+  setupTabs();
 }).catch(err => {
   console.error("Error loading data or geojson:", err);
 });
@@ -242,21 +251,50 @@ function updateCountyDetails(row) {
     <p><strong>Total population:</strong> ${row.TotalPopulation.toLocaleString()}</p>
     <p><strong>Median income:</strong> $${row.MedianIncome.toLocaleString()}</p>
     <p><strong>Poverty rate:</strong> ${row.PovertyRate.toFixed(1)}%</p>
+    <p><strong>Bachelor's degree or higher:</strong> ${row.BAplusPercent.toFixed(1)}%</p>
   `);
 }
 
 /**
- * Draw correlation scatterplot: income vs depression (age-adjusted)
+ * Draw all scatterplots
  */
-function drawScatter(rows) {
+function drawAllScatters(rows) {
   scatterData = rows;
+  
+  drawScatter(rows, "income", scatterSvgs.income, {
+    xField: "MedianIncome",
+    xLabel: "Median household income",
+    xFormat: d => `$${(d/1000).toFixed(0)}k`,
+    xValue: d => d.MedianIncome,
+    tooltipValue: d => `$${d.MedianIncome.toLocaleString()}`
+  });
+  
+  drawScatter(rows, "poverty", scatterSvgs.poverty, {
+    xField: "PovertyRate",
+    xLabel: "Poverty rate (%)",
+    xFormat: d => d + "%",
+    xValue: d => d.PovertyRate,
+    tooltipValue: d => `${d.PovertyRate.toFixed(1)}%`
+  });
+  
+  drawScatter(rows, "education", scatterSvgs.education, {
+    xField: "BAplusPercent",
+    xLabel: "Bachelor's degree or higher (%)",
+    xFormat: d => d + "%",
+    xValue: d => d.BAplusPercent,
+    tooltipValue: d => `${d.BAplusPercent.toFixed(1)}%`
+  });
+}
 
-  const svg = scatterSvg;
+/**
+ * Draw correlation scatterplot: depression vs various factors
+ */
+function drawScatter(rows, tabName, svg, config) {
   svg.selectAll("*").remove();
 
   const margin = { top: 20, right: 20, bottom: 40, left: 50 };
-  const fullWidth  = svg.node().clientWidth  || 360;
-  const fullHeight = svg.node().clientHeight || 260;
+  const fullWidth  = 360;
+  const fullHeight = 260;
   const width  = fullWidth  - margin.left - margin.right;
   const height = fullHeight - margin.top  - margin.bottom;
 
@@ -266,11 +304,11 @@ function drawScatter(rows) {
     .attr("transform", `translate(${margin.left},${margin.top})`);
 
   const filtered = rows.filter(d =>
-    !isNaN(d.MedianIncome) && !isNaN(d.DEPRESSION_AdjPrev)
+    !isNaN(config.xValue(d)) && !isNaN(d.DEPRESSION_AdjPrev)
   );
 
   const x = d3.scaleLinear()
-    .domain(d3.extent(filtered, d => d.MedianIncome)).nice()
+    .domain(d3.extent(filtered, config.xValue)).nice()
     .range([0, width]);
 
   const y = d3.scaleLinear()
@@ -283,7 +321,7 @@ function drawScatter(rows) {
     .call(
       d3.axisBottom(x)
         .ticks(5)
-        .tickFormat(d => `$${(d/1000).toFixed(0)}k`)
+        .tickFormat(config.xFormat)
     );
 
   g.append("g")
@@ -299,7 +337,7 @@ function drawScatter(rows) {
     .attr("y", height + 32)
     .attr("text-anchor", "middle")
     .style("font-size", 11)
-    .text("Median household income");
+    .text(config.xLabel);
 
   g.append("text")
     .attr("transform", "rotate(-90)")
@@ -313,8 +351,8 @@ function drawScatter(rows) {
   g.selectAll("circle")
     .data(filtered)
     .join("circle")
-    .attr("class", "scatter-point")
-    .attr("cx", d => x(d.MedianIncome))
+    .attr("class", `scatter-point scatter-${tabName}`)
+    .attr("cx", d => x(config.xValue(d)))
     .attr("cy", d => y(d.DEPRESSION_AdjPrev))
     .attr("r", 4)
     .attr("fill", "#3182bd")
@@ -326,7 +364,7 @@ function drawScatter(rows) {
         .html(`
           <strong>${d.CountyName} County</strong><br/>
           Depression: ${d.DEPRESSION_AdjPrev.toFixed(1)}%<br/>
-          Income: $${d.MedianIncome.toLocaleString()}
+          ${config.xLabel.split(" (")[0]}: ${config.tooltipValue(d)}
         `)
         .style("left", (event.pageX + 10) + "px")
         .style("top",  (event.pageY + 10) + "px");
@@ -339,11 +377,46 @@ function drawScatter(rows) {
 }
 
 /**
+ * Setup tab switching
+ */
+function setupTabs() {
+  const tabs = document.querySelectorAll(".tab");
+  const panels = document.querySelectorAll(".scatter-panel");
+  
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      const tabName = tab.getAttribute("data-tab");
+      
+      // Update active tab
+      tabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      
+      // Update active panel
+      panels.forEach(p => p.classList.remove("active"));
+      document.getElementById(`scatter-${tabName}`).classList.add("active");
+      
+      currentTab = tabName;
+      
+      // Re-highlight if a county is selected
+      if (selectedCountyName) {
+        highlightScatter(selectedCountyName);
+      }
+    });
+  });
+}
+
+/**
  * Highlight scatterpoint when its county is selected on map
  */
 function highlightScatter(countyName) {
-  scatterSvg.selectAll(".scatter-point")
-    .attr("fill", d => d.CountyName === countyName ? "#dc2626" : "#3182bd")
-    .attr("stroke", "none")
-    .attr("r", d => d.CountyName === countyName ? 6 : 4);
+  selectedCountyName = countyName;
+  
+  // Highlight in all scatterplots
+  Object.values(scatterSvgs).forEach(svg => {
+    svg.selectAll(".scatter-point")
+      .attr("fill", d => d.CountyName === countyName ? "#dc2626" : "#3182bd")
+      .attr("stroke", d => d.CountyName === countyName ? "#dc2626" : "none")
+      .attr("stroke-width", d => d.CountyName === countyName ? 1.5 : 0)
+      .attr("r", d => d.CountyName === countyName ? 6 : 4);
+  });
 }
