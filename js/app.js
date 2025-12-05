@@ -1,46 +1,31 @@
-// js/app.js
-console.log("✅ app.js loaded, D3 version:", d3.version);
+// JavaScript functionality for NC Depression Hotspots visualization
 
-/*
-  app.js - NC Depression Hotspots
-
-  Minimal inline comments added below to explain the main pieces:
-  - top-level state and DOM refs
-  - selection / brushing behavior
-  - Needs Index computation and controls
-  - map + legend drawing
-  - scatterplot drawing and brushing
-
-  The aim is to keep comments short and intuitive so future readers can quickly
-  understand why each function exists and what side-effects it has.
-*/
-
-// DOM references
+// References the DOM elements we'll interact with to link JS and HTML elements so we can use D3 later to draw charts and update text
 const mapSvg       = d3.select("#map");
 const tooltip      = d3.select("#tooltip");
-// moved county details into the map container
+//Detail panel elements
 const detailsTitle = d3.select("#map-county-title");
 const detailsBox   = d3.select("#map-county-details");
-
+//Scatter plot elements
 const scatterSvgs = {
   income: d3.select("#scatter-income-svg"),
   poverty: d3.select("#scatter-poverty-svg"),
   education: d3.select("#scatter-education-svg")
 };
 
+// Sets intial states for variables and data sets
 let scatterData = [];
 let currentTab = "income";
 let selectedCountyName = null;
-// Brushing state: set of county names currently selected by brush
+// Set of selected county names for the select cluster feature
 let brushedCountyNames = new Set();
-// Flag to ignore click events while brushing
+// Sets selection mode states
 let isBrushing = false;
-// selection mode: 'individual' or 'cluster'
 let selectionMode = 'individual';
 
+// Update UI and brush visibility based on selection mode
 function setSelectionMode(mode) {
   selectionMode = mode;
-  // update UI buttons if present
   const ind = document.getElementById('mode-individual');
   const clu = document.getElementById('mode-cluster');
   if (ind && clu) {
@@ -52,31 +37,24 @@ function setSelectionMode(mode) {
       ind.style.background = 'white'; ind.style.color = 'black';
     }
   }
-  // show/hide brushes on all plots
+  // Adjusts show state of brush so it is not showing up when not in use
   const show = mode === 'cluster';
   d3.selectAll('.brush').style('display', show ? null : 'none');
-  // ensure we are not stuck in brushing state
   isBrushing = false;
 }
 
-// Toggle between 'individual' (click to pick a single county)
-// and 'cluster' (enable brushes on all scatterplots for multi-select).
-// Updates UI buttons and shows/hides brush groups accordingly.
 
-
+// Toggles between individual and cluster selection modes and updates the UI accordingly
 function setupSelectionModeControls() {
   const ind = document.getElementById('mode-individual');
   const clu = document.getElementById('mode-cluster');
   if (!ind || !clu) return;
   ind.addEventListener('click', () => setSelectionMode('individual'));
   clu.addEventListener('click', () => setSelectionMode('cluster'));
-  // initialize
   setSelectionMode(selectionMode);
 }
 
-/**
- * Update scatter point styles across all scatterplots based on a set of county names
- */
+// Emphasize selected points in scatterplots with red fill and black stroke and outline them on the map with a thicker black outline
 function updateScatterHighlightsByNames(nameSet) {
   Object.values(scatterSvgs).forEach(svg => {
     svg.selectAll(".scatter-point")
@@ -85,7 +63,6 @@ function updateScatterHighlightsByNames(nameSet) {
       .attr("stroke-width", d => nameSet.has(d.CountyName) ? 1.5 : 0)
       .attr("r", d => nameSet.has(d.CountyName) ? 6 : 4);
   });
-  // Also outline matching counties on the map for multi-selection
   try {
     mapSvg.selectAll("path").each(function() {
       const el = d3.select(this);
@@ -95,17 +72,12 @@ function updateScatterHighlightsByNames(nameSet) {
         .attr("stroke-width", isSel ? 3 : 0.5);
     });
   } catch (e) {
-    // in case map isn't ready yet, fail silently
-    // console.warn("Map not ready for highlighting brush selection", e);
+    // If map hasn't loaded yet, fail silently
   }
 }
 
-// Update both the scatterplot points and the map paths to reflect a
-// multi-selection (provided as a Set of CountyName strings).
-// Visuals: selected points -> red fill + black stroke; map -> thicker black outline.
 
-
-// Load CSV + GeoJSON
+// Load CSV + GeoJSON data files
 Promise.all([
   d3.csv("data/NC_County_Data.csv"),
   d3.json("data/nc-counties.geojson")
@@ -115,26 +87,25 @@ console.log("Rows loaded from CSV:", rows.length);
 console.log("GeoJSON type:", geo.type);
 console.log("GeoJSON features:", geo.features ? geo.features.length : "NO FEATURES");
 
-  // --- 1. Clean up CSV values / types ---
+  // Clean up the CSV values from data files and assign types
   rows.forEach(d => {
     d.DEPRESSION_AdjPrev   = +d["DEPRESSION_AdjPrev"];   // age-adjusted %
     d.DEPRESSION_CrudePrev = +d["DEPRESSION_CrudePrev"]; // crude %
-    d.TotalPopulation      = +d["TotalPopulation"];
-    d.TotalPop18plus       = +d["TotalPop18plus"];
-    d.MedianIncome         = +d["MedianIncome"];
-    d.PovertyRate          = +d["PovertyRate"];
-    d.BAplusPercent        = +d["BAplusPercent"];        // education %
-    d.CountyFIPS           = d["CountyFIPS"].toString().padStart(5, "0"); // e.g. 37001
+    d.TotalPopulation      = +d["TotalPopulation"]; // total population
+    d.TotalPop18plus       = +d["TotalPop18plus"]; // adult population
+    d.MedianIncome         = +d["MedianIncome"]; // median income
+    d.PovertyRate          = +d["PovertyRate"]; // poverty %
+    d.BAplusPercent        = +d["BAplusPercent"]; // education %
+    d.CountyFIPS           = d["CountyFIPS"].toString().padStart(5, "0"); // count FIPS code: connects the counties from CSV to GeoJSON boundaries
   });
 
+  // maps the CSV rows by CountyFIPS for easy lookup
   const byFips = new Map(rows.map(d => [d.CountyFIPS, d]));
 
-  // --- 2. Use your GeoJSON features ---
+  // Uses the GeoJSON features to set up county boundaries
   const counties = geo.features;
 
-  // Your properties look like:
-  // { County: 'Alamance', FIPS: '001', ... }
-  // We need to convert '001' -> '37001' to match CountyFIPS.
+  // Match county FIPS between CSV and GeoJSON
   function getFipsFromFeature(f) {
     const props = f.properties || {};
     if (props.GEOID) {
@@ -153,10 +124,11 @@ console.log("GeoJSON features:", geo.features ? geo.features.length : "NO FEATUR
     return "";
   }
 
-  // Projection (use fixed size to avoid flexbox weirdness)
+  // Sets fixed size for map
   const mapWidth  = 800;
   const mapHeight = 600;
 
+  // Uses D3 to draw NC counties using a mercator projection for NC
   const projection = d3.geoMercator()
     .fitSize([mapWidth, mapHeight], {
       type: "FeatureCollection",
@@ -166,40 +138,30 @@ console.log("GeoJSON features:", geo.features ? geo.features.length : "NO FEATUR
   const path = d3.geoPath().projection(projection);
 
 
-  // --- 3. Scales for depression hotspot encoding ---
+  // Create color scale for depression rate and assigns a sequential red scale using the D3 interpolateReds scale
   const depExtent = d3.extent(rows, d => d.DEPRESSION_AdjPrev);
   const colorDep = d3.scaleSequential(d3.interpolateReds).domain(depExtent);
 
-  // Create placeholder needs color scale; domain will be updated when user applies the formula
+  // Depression rate color scale for intial state
   const colorNeeds = d3.scaleSequential(d3.interpolateReds).domain([0, 10]);
-
-  // draw map initially colored by depression rate
   drawMap(counties, byFips, getFipsFromFeature, path, colorDep, depExtent, 'Depression Rate (age-adjusted %)');
   drawAllScatters(rows);
   setupTabs();
-  // add region quick-select buttons
+  // Add region buttons
   setupRegionButtons(counties, byFips, getFipsFromFeature);
-  // setup selection mode controls after scatters/brush groups created
+  // Add selection mode controls
   setupSelectionModeControls();
-  // setup needs index controls (apply/reset handlers)
+  // Create needs index controls
   setupNeedsIndexControls(rows, counties, byFips, getFipsFromFeature, path, colorNeeds);
-  // setup sidebar internal tab switching (Formula / Graphs)
+  // Create sidebar tabs and toggle feature for them
   setupSidebarTabs();
-  // setup the toggle/close behavior for the needs index sidebar/tab
   setupNeedsTabToggle();
 }).catch(err => {
   console.error("Error loading data or geojson:", err);
 });
 
-// Load, parse and initialize
-// - CSV rows + GeoJSON features are fetched above.
-// - Data types are normalized and a map (byFips) is created for lookups.
-// - Projections, scales and initial visualizations are then created.
 
-
-/**
- * Setup tabs inside the right sidebar: Formula (default) and Graphs
- */
+// Set up the two tab views in the sidebar and style their intial state
 function setupSidebarTabs() {
   const tabFormula = document.getElementById('tab-formula');
   const tabGraphs = document.getElementById('tab-graphs');
@@ -224,28 +186,20 @@ function setupSidebarTabs() {
   tabFormula.addEventListener('click', showFormula);
   tabGraphs.addEventListener('click', showGraphs);
 
-  // default to showing Formula panel
-  showFormula();
+  // Graphs show as default
+  showGraphs();
 }
 
-// Manage the Formula / Graphs tabs inside the right-hand sidebar.
-// Clicking a tab toggles which panel's content is visible.
-
-
-/**
- * Compute NeedsIndex for each row using provided weights object {income, education, depression, poverty}
- * Each variable is normalized to 0-1 (income/education inverted so higher means less need).
- * Resulting index is scaled to 0-10 and stored on row.NeedsIndex.
- */
+// Function to calculate formula for needs index using user-defined weights
 function computeNeedsIndex(rows, weights) {
-  // determine selected variables (weights may be zero)
+  // If variables were chosen, assigns weights
   const vars = [];
   if (weights.income > 0) vars.push('income');
   if (weights.education > 0) vars.push('education');
   if (weights.depression > 0) vars.push('depression');
   if (weights.poverty > 0) vars.push('poverty');
 
-  // helper to safe extent and normalization
+  // Ensures normalization of values
   function norm(values, invert=false) {
     const min = d3.min(values);
     const max = d3.max(values);
@@ -256,75 +210,41 @@ function computeNeedsIndex(rows, weights) {
     });
   }
 
-  // collect arrays
+  // Creates arrays of each variable's values from the CSV data
   const incomeVals = rows.map(r => r.MedianIncome);
   const eduVals = rows.map(r => r.BAplusPercent);
   const depVals = rows.map(r => r.DEPRESSION_AdjPrev);
   const povVals = rows.map(r => r.PovertyRate);
 
-  const nIncome = norm(incomeVals, true); // invert: higher income = less need
-  const nEdu = norm(eduVals, true); // invert: higher education = less need
+  const nIncome = norm(incomeVals, true); 
+  const nEdu = norm(eduVals, true); 
   const nDep = norm(depVals, false);
   const nPov = norm(povVals, false);
 
-  // normalize weight sum
+  // Creates a sum of normalized weights
   let total = (weights.income || 0) + (weights.education || 0) + (weights.depression || 0) + (weights.poverty || 0);
-  if (total === 0) total = 1; // avoid div by zero
+  if (total === 0) total = 1; 
 
   const wi = (weights.income || 0) / total;
   const we = (weights.education || 0) / total;
   const wd = (weights.depression || 0) / total;
   const wp = (weights.poverty || 0) / total;
 
+  // Computes the final NeedsIndex score for each row (county)
   rows.forEach((r, i) => {
     const score = (nIncome[i] * wi) + (nEdu[i] * we) + (nDep[i] * wd) + (nPov[i] * wp);
-    r.NeedsIndex = +(score * 10).toFixed(2); // 0-10 scale
+    r.NeedsIndex = +(score * 10).toFixed(2);
   });
 }
 
-// Compute a normalized 'NeedsIndex' on a 0-10 scale from selected variables.
-// Variables are normalized (income/education inverted so higher means less need),
-// weights are normalized, and the combined score is scaled to 0-10 and stored on each row.
-
-
-/**
- * Make the right-hand needs-index sidebar closable and provide a small tab to re-open it.
- */
-function setupNeedsTabToggle() {
-  const close = document.getElementById('close-needs-tab');
-  const sidebar = document.getElementById('sidebar');
-  const panelFormula = document.getElementById('panel-formula');
-  const panelGraphs = document.getElementById('panel-graphs');
-  if (!close || !sidebar || !panelFormula || !panelGraphs) return;
-
-  // toggle panels collapsed vs expanded while keeping the sidebar/tabs visible
-  close.addEventListener('click', () => {
-    const collapsed = (panelFormula.style.display === 'none' && panelGraphs.style.display === 'none');
-    if (!collapsed) {
-      // collapse content but keep tabs visible
-      panelFormula.style.display = 'none';
-      panelGraphs.style.display = 'none';
-      close.textContent = '▸';
-    } else {
-      // expand: show formula panel by default
-      panelFormula.style.display = null;
-      panelGraphs.style.display = 'none';
-      close.textContent = '✕';
-    }
-  });
-}
-
-// Keep the sidebar tabs visible while allowing the content panels to be
-// collapsed — useful when the user wants more map space but still reopen the tab.
-
-
+// Creates apply and reset buttons for the Needs Index controls
 function setupNeedsIndexControls(rows, counties, byFips, getFipsFromFeature, path, colorNeeds) {
   const apply = document.getElementById('apply-needs');
   const reset = document.getElementById('reset-needs');
   if (!apply || !reset) return;
 
   apply.addEventListener('click', () => {
-    // read checkboxes and sliders
+    // Gets user input from checkboxes and sliders in the formula tab
     const useIncome = document.getElementById('var-income').checked;
     const useEdu = document.getElementById('var-education').checked;
     const useDep = document.getElementById('var-depression').checked;
@@ -342,15 +262,14 @@ function setupNeedsIndexControls(rows, counties, byFips, getFipsFromFeature, pat
     };
 
     computeNeedsIndex(rows, weights);
-    // update color scale domain
+    // Update the color scale domain for Needs Index
     const newExtent = d3.extent(rows, d => d.NeedsIndex);
     colorNeeds.domain(newExtent);
-    // redraw map colored by needs
     drawMap(counties, byFips, getFipsFromFeature, path, colorNeeds, newExtent, 'Needs Index (0-10)');
   });
 
+  // Reset button to default values upon clicking reset
   reset.addEventListener('click', () => {
-    // reset sliders and checkboxes to defaults
     document.getElementById('var-income').checked = true;
     document.getElementById('var-education').checked = true;
     document.getElementById('var-depression').checked = true;
@@ -366,20 +285,13 @@ function setupNeedsIndexControls(rows, counties, byFips, getFipsFromFeature, pat
   });
 }
 
-// Wire the Apply/Reset buttons for the Needs Index UI.
-// - Reads checkboxes + slider weights, computes NeedsIndex, updates the color domain,
-//   and redraws the map using the Needs color scale when Apply is clicked.
 
 
-/**
- * Create quick-select buttons that select geographic regions (west/central/east/all)
- * Regions are computed by county centroid longitude tertiles.
- */
+
+// Add functionality for region selection buttons by splitting counties into west/central/east based on centroid longitudes and selecting + outlining the counties of those regions
 function setupRegionButtons(counties, byFips, getFipsFromFeature) {
   const container = d3.select('#region-controls');
   if (container.empty()) return;
-
-  // compute centroid longitudes for each county
   const lonByFeature = counties.map(f => ({
     f,
     lon: d3.geoCentroid(f)[0]
@@ -400,7 +312,7 @@ function setupRegionButtons(counties, byFips, getFipsFromFeature) {
     return names;
   }
 
-  // helper to create a button
+  // Function to create a button with label and onClick handler for other functions to use for UI creation
   function makeButton(label, onClick) {
     const btn = container.append('button')
       .attr('type', 'button')
@@ -440,18 +352,12 @@ function setupRegionButtons(counties, byFips, getFipsFromFeature) {
   makeButton('Clear Selection', () => {
     brushedCountyNames.clear();
     updateScatterHighlightsByNames(brushedCountyNames);
-    // also clear single selection outline
     highlightScatter(null);
   });
 }
 
-// Quick-select geographic regions (west/central/east) by using centroid longitudes.
-// These helpers produce a Set of CountyName strings which is applied as a brushed selection.
 
-
-/**
- * Draw NC map with depression hotspots colored by county
- */
+// Function to draw the main choropleth map. Each county is filled by the provided color scale.
 function drawMap(counties, byFips, getFipsFromFeature, path, color, legendExtent, legendTitle) {
   mapSvg.selectAll("*").remove();
 
@@ -463,7 +369,6 @@ function drawMap(counties, byFips, getFipsFromFeature, path, color, legendExtent
     .attr("viewBox", `0 0 ${w} ${h}`)
     .append("g");
 
-  // County polygons colored by depression rate
   g.selectAll("path")
     .data(counties)
     .join("path")
@@ -472,17 +377,16 @@ function drawMap(counties, byFips, getFipsFromFeature, path, color, legendExtent
       const fips = getFipsFromFeature(d);
       const row = byFips.get(fips);
       if (!row) return "#f5f5f5";
-      // prefer NeedsIndex if available, otherwise fall back to depression
+      // Use needs index color scale is set, otherwise depression color scale intially
       const val = (row.NeedsIndex != null) ? row.NeedsIndex : row.DEPRESSION_AdjPrev;
       return color(val);
     })
-    // keep the county name on the element so other functions can find it
     .attr("data-county-name", d => {
       const fips = getFipsFromFeature(d);
       const row = byFips.get(fips);
       return row ? row.CountyName : "";
     })
-    // stroke depends on whether this county is currently selected
+    // Add stroke if county is selected
     .attr("stroke", d => {
       const fips = getFipsFromFeature(d);
       const row = byFips.get(fips);
@@ -499,7 +403,7 @@ function drawMap(counties, byFips, getFipsFromFeature, path, color, legendExtent
       const row = byFips.get(fips);
       if (!row) return;
       const isSelected = row.CountyName === selectedCountyName;
-      // If already selected, keep black outline; otherwise use hover color
+      // Keep the balck outline while selected
       d3.select(this)
         .attr("stroke-width", isSelected ? 3 : 2)
         .attr("stroke", isSelected ? "#000" : "#333");
@@ -520,7 +424,6 @@ function drawMap(counties, byFips, getFipsFromFeature, path, color, legendExtent
         .style("top",  (event.pageY + 10) + "px");
     })
     .on("mouseout", function (event, d) {
-      // On mouseout, restore either the selected outline or normal style
       const fips = getFipsFromFeature(d);
       const row = byFips.get(fips);
       const isSelected = row && row.CountyName === selectedCountyName;
@@ -538,17 +441,11 @@ function drawMap(counties, byFips, getFipsFromFeature, path, color, legendExtent
       }
     });
 
-  // Draw color legend
   drawColorLegend(g, color, legendExtent, w, h, legendTitle);
 }
 
-// Draw the main choropleth map. Each county is filled by the provided color scale.
-// Attaches tooltip, hover, and click behaviors and then calls drawColorLegend.
 
-
-/**
- * Draw color legend for a given scale
- */
+// Draw color legend above the map 
 function drawColorLegend(g, color, legendExtent, mapWidth, mapHeight, title) {
   const legendWidth = 300;
   const legendHeight = 18;
@@ -558,10 +455,8 @@ function drawColorLegend(g, color, legendExtent, mapWidth, mapHeight, title) {
     return { offset: `${(i / (tickCount - 1)) * 100}%`, color: color(value), value: value };
   });
 
-  // If there's a dedicated HTML container for the map legend, render the legend there
   const htmlLegend = document.getElementById('map-legend');
   if (htmlLegend) {
-    // clear existing
     htmlLegend.innerHTML = '';
     const svg = d3.select(htmlLegend).append('svg')
       .attr('viewBox', `0 0 ${legendWidth + 40} ${legendHeight + 40}`)
@@ -585,7 +480,7 @@ function drawColorLegend(g, color, legendExtent, mapWidth, mapHeight, title) {
       .style('stroke', '#333')
       .style('stroke-width', 1);
 
-    // title
+    // Create title for legend
     g2.append('text')
       .attr('x', legendWidth / 2)
       .attr('y', -6)
@@ -594,7 +489,7 @@ function drawColorLegend(g, color, legendExtent, mapWidth, mapHeight, title) {
       .style('font-weight', 'bold')
       .text(title || 'Legend');
 
-    // ticks
+    // Add legend ticks and labels to indicate scale values
     const tickValues = d3.range(tickCount).map(i => d3.interpolateNumber(legendExtent[0], legendExtent[1])(i / (tickCount - 1)));
     const tickScale = d3.scaleLinear().domain(legendExtent).range([0, legendWidth]);
     tickValues.forEach(value => {
@@ -604,8 +499,6 @@ function drawColorLegend(g, color, legendExtent, mapWidth, mapHeight, title) {
     });
     return;
   }
-
-  // Fallback: draw inside the provided SVG group (map area)
   const legendX = mapWidth - legendWidth - 20;
   const legendY = 20;
   const legend = g.append("g")
@@ -627,14 +520,8 @@ function drawColorLegend(g, color, legendExtent, mapWidth, mapHeight, title) {
   });
 }
 
-// Render a horizontal color ramp legend. If an HTML container `#map-legend` exists,
-// draw the legend there (gives more layout control); otherwise fall back to drawing
-// inside the SVG group passed in.
 
-
-/**
- * Update the details panel
- */
+// Update details panel with selected county stats
 function updateCountyDetails(row) {
   detailsTitle.text(`${row.CountyName} County`);
   detailsBox.html(`
@@ -648,13 +535,8 @@ function updateCountyDetails(row) {
   `);
 }
 
-// Fill the details panel under the map with a concise set of stats for the
-// selected county. The panel is scrollable if there are many fields.
 
-
-/**
- * Draw all scatterplots
- */
+// Draw scatterplots graph/ outline for all three factors vs depression and align vertically
 function drawAllScatters(rows) {
   scatterData = rows;
   
@@ -683,13 +565,8 @@ function drawAllScatters(rows) {
   });
 }
 
-// Create the three scatterplots (each compares a factor vs depression).
-// This function delegates to drawScatter for each variable of interest.
 
-
-/**
- * Draw correlation scatterplot: depression vs various factors
- */
+// Add values/ datapoints to scatterplots
 function drawScatter(rows, tabName, svg, config) {
   svg.selectAll("*").remove();
 
@@ -716,7 +593,7 @@ function drawScatter(rows, tabName, svg, config) {
     .domain(d3.extent(filtered, d => d.DEPRESSION_AdjPrev)).nice()
     .range([height, 0]);
 
-  // Axes
+  // Creates axes for scatterplots
   g.append("g")
     .attr("transform", `translate(0,${height})`)
     .call(
@@ -732,7 +609,7 @@ function drawScatter(rows, tabName, svg, config) {
         .tickFormat(d => d + "%")
     );
 
-  // Axis labels
+  // Creates axis labels for scatterplots
   g.append("text")
     .attr("x", width / 2)
     .attr("y", height + 32)
@@ -748,7 +625,6 @@ function drawScatter(rows, tabName, svg, config) {
     .style("font-size", 11)
     .text("Depression (age-adjusted, %)");
 
-  // Points
   g.selectAll("circle")
     .data(filtered)
     .join("circle")
@@ -772,21 +648,18 @@ function drawScatter(rows, tabName, svg, config) {
     })
     .on("mouseout", () => tooltip.style("opacity", 0))
     .on("click", (event, d) => {
-      // ignore click events when brushing
       if (isBrushing) return;
-      // only allow single-click selection in 'individual' mode
       if (selectionMode !== 'individual') return;
       updateCountyDetails(d);
-      // clicking a single point should select that county (map outline + scatter highlight)
       highlightScatter(d.CountyName);
     });
 
-  // -- Brushing: allow selecting clusters of points and highlight them across all plots
+  // Allow users to brush to select multiple points
   const brush = d3.brush()
     .extent([[0, 0], [width, height]])
     .on("start", () => { isBrushing = true; })
     .on("brush", (event) => {
-      // while brushing, optionally provide live feedback by highlighting points in this plot
+      // Highlight selected points as brushing
       if (!event.selection) return;
       const [[x0, y0], [x1, y1]] = event.selection;
       const names = new Set(filtered.filter(d => {
@@ -794,13 +667,12 @@ function drawScatter(rows, tabName, svg, config) {
         const cy = y(d.DEPRESSION_AdjPrev);
         return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
       }).map(d => d.CountyName));
-      // show live selection on all plots
       updateScatterHighlightsByNames(names);
     })
     .on("end", (event) => {
       isBrushing = false;
       if (!event.selection) {
-        // clear selection
+        // Clear selection is clicked outside brush area
         brushedCountyNames.clear();
         updateScatterHighlightsByNames(brushedCountyNames);
         return;
@@ -811,25 +683,17 @@ function drawScatter(rows, tabName, svg, config) {
         const cy = y(d.DEPRESSION_AdjPrev);
         return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
       }).map(d => d.CountyName));
-      // store the brush selection and apply it across all plots
+      // Show brush selection across all scatterplots
       brushedCountyNames = names;
       updateScatterHighlightsByNames(brushedCountyNames);
     });
-
-  // Attach brush to the plotting group so coordinates match the scales
   g.append("g")
     .attr("class", "brush")
     .call(brush);
 }
 
-// Draw a single scatterplot of depression vs a chosen x-variable.
-// - Shows points, axes, and axis labels.
-// - Supports click selection (when not brushing) and a brush for cluster selection.
 
-
-/**
- * Setup tab switching
- */
+// Sets up active tab name tracking for selected tab
 function setupTabs() {
   const tabs = document.querySelectorAll(".tab");
   const panels = document.querySelectorAll(".scatter-panel");
@@ -838,17 +702,14 @@ function setupTabs() {
     tab.addEventListener("click", () => {
       const tabName = tab.getAttribute("data-tab");
       
-      // Update active tab
       tabs.forEach(t => t.classList.remove("active"));
       tab.classList.add("active");
       
-      // Update active panel
       panels.forEach(p => p.classList.remove("active"));
       document.getElementById(`scatter-${tabName}`).classList.add("active");
       
       currentTab = tabName;
       
-      // Re-highlight if a county is selected
       if (selectedCountyName) {
         highlightScatter(selectedCountyName);
       }
@@ -856,12 +717,8 @@ function setupTabs() {
   });
 }
 
-// Tab switching for the older scatter-panel UI: select which scatter tab is active.
 
-
-/**
- * Highlight scatterpoint when its county is selected on map
- */
+// Emphasize a selected county data point across all scatterplots and the map
 function highlightScatter(countyName) {
   // allow clearing selection by passing a falsy countyName
   if (!countyName) {
@@ -882,13 +739,11 @@ function highlightScatter(countyName) {
     });
     return;
   }
-
-  // Clear any brush-based multi-selection when a single county is explicitly chosen
   brushedCountyNames.clear();
 
   selectedCountyName = countyName;
 
-  // Highlight in all scatterplots (selected point gets black outline)
+  // Highlight in all scatterplots when a county is selected
   Object.values(scatterSvgs).forEach(svg => {
     svg.selectAll(".scatter-point")
       .attr("fill", d => d.CountyName === countyName ? "#dc2626" : "#3182bd")
@@ -897,7 +752,6 @@ function highlightScatter(countyName) {
       .attr("r", d => d.CountyName === countyName ? 6 : 4);
   });
 
-  // Update map paths to outline the selected county in black, clear others
   mapSvg.selectAll("path").each(function() {
     const el = d3.select(this);
     const name = el.attr("data-county-name");
@@ -906,7 +760,4 @@ function highlightScatter(countyName) {
       .attr("stroke-width", isSel ? 3 : 0.5);
   });
 }
-
-// Highlight a single county consistently across the map and all scatterplots.
-// Passing a falsy `countyName` clears the selection and resets visuals.
 
