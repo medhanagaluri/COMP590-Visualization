@@ -138,19 +138,29 @@
   </style>
 </head>
 <body>
+  <!--
+    Main layout
+    - Left: #map-container contains the map title, region controls, the map legend bar,
+      the SVG map, tooltip container, and the county details panel beneath the map.
+    - Right: #sidebar contains the Formula / Graphs tabs. Formula holds the Needs Index
+      controls; Graphs holds stacked scatterplots. Tabs are always visible.
+  -->
   <div id="main-content">
     <div id="map-container">
+      <!-- Map header / title -->
       <h2 id="map-title">NC Depression Hotspots</h2>
       <div id="region-controls"></div>
       <!-- map legend bar (color scale) -->
-      <div id="map-legend" style="padding:8px 16px; background:#fff;
-                  border-bottom:1px solid #eee; display:flex; align-items:center;">
+      <!-- Legend container (drawn by JS). Keeps the legend visually separate from the SVG map. -->
+      <div id="map-legend" style="padding:8px 16px; background:#fff; border-bottom:1px solid #eee; display:flex; align-items:center;">
         <!-- legend SVG inserted by JS -->
       </div>
 
+      <!-- SVG map: drawn and sized by JS. Tooltip is a positioned floating div. -->
       <svg id="map"></svg>
       <div id="tooltip" class="tooltip"></div>
 
+      <!-- County details panel (under the map). This panel is scrollable when content is long. -->
       <div id="map-details">
         <h3 id="map-county-title" style="margin:0 0 6px 0; font-size:15px;">County Details</h3>
         <div id="map-county-details">Click a county on the map to see its depression rate and demographics.</div>

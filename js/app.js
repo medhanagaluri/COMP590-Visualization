@@ -1,6 +1,20 @@
 // js/app.js
 console.log("✅ app.js loaded, D3 version:", d3.version);
 
+/*
+  app.js - NC Depression Hotspots
+
+  Minimal inline comments added below to explain the main pieces:
+  - top-level state and DOM refs
+  - selection / brushing behavior
+  - Needs Index computation and controls
+  - map + legend drawing
+  - scatterplot drawing and brushing
+
+  The aim is to keep comments short and intuitive so future readers can quickly
+  understand why each function exists and what side-effects it has.
+*/
+
 // DOM references
 const mapSvg       = d3.select("#map");
 const tooltip      = d3.select("#tooltip");
@@ -45,6 +59,11 @@ function setSelectionMode(mode) {
   isBrushing = false;
 }
 
+// Toggle between 'individual' (click to pick a single county)
+// and 'cluster' (enable brushes on all scatterplots for multi-select).
+// Updates UI buttons and shows/hides brush groups accordingly.
+
+
 function setupSelectionModeControls() {
   const ind = document.getElementById('mode-individual');
   const clu = document.getElementById('mode-cluster');
@@ -80,6 +99,11 @@ function updateScatterHighlightsByNames(nameSet) {
     // console.warn("Map not ready for highlighting brush selection", e);
   }
 }
+
+// Update both the scatterplot points and the map paths to reflect a
+// multi-selection (provided as a Set of CountyName strings).
+// Visuals: selected points -> red fill + black stroke; map -> thicker black outline.
+
 
 // Load CSV + GeoJSON
 Promise.all([
@@ -167,6 +191,12 @@ console.log("GeoJSON features:", geo.features ? geo.features.length : "NO FEATUR
   console.error("Error loading data or geojson:", err);
 });
 
+// Load, parse and initialize
+// - CSV rows + GeoJSON features are fetched above.
+// - Data types are normalized and a map (byFips) is created for lookups.
+// - Projections, scales and initial visualizations are then created.
+
+
 /**
  * Setup tabs inside the right sidebar: Formula (default) and Graphs
  */
@@ -197,6 +227,10 @@ function setupSidebarTabs() {
   // default to showing Formula panel
   showFormula();
 }
+
+// Manage the Formula / Graphs tabs inside the right-hand sidebar.
+// Clicking a tab toggles which panel's content is visible.
+
 
 /**
  * Compute NeedsIndex for each row using provided weights object {income, education, depression, poverty}
@@ -248,6 +282,11 @@ function computeNeedsIndex(rows, weights) {
   });
 }
 
+// Compute a normalized 'NeedsIndex' on a 0-10 scale from selected variables.
+// Variables are normalized (income/education inverted so higher means less need),
+// weights are normalized, and the combined score is scaled to 0-10 and stored on each row.
+
+
 /**
  * Make the right-hand needs-index sidebar closable and provide a small tab to re-open it.
  */
@@ -274,6 +313,10 @@ function setupNeedsTabToggle() {
     }
   });
 }
+
+// Keep the sidebar tabs visible while allowing the content panels to be
+// collapsed — useful when the user wants more map space but still reopen the tab.
+
 
 function setupNeedsIndexControls(rows, counties, byFips, getFipsFromFeature, path, colorNeeds) {
   const apply = document.getElementById('apply-needs');
@@ -322,6 +365,11 @@ function setupNeedsIndexControls(rows, counties, byFips, getFipsFromFeature, pat
     drawMap(counties, byFips, getFipsFromFeature, path, colorNeeds, newExtent, 'Needs Index (0-10)');
   });
 }
+
+// Wire the Apply/Reset buttons for the Needs Index UI.
+// - Reads checkboxes + slider weights, computes NeedsIndex, updates the color domain,
+//   and redraws the map using the Needs color scale when Apply is clicked.
+
 
 /**
  * Create quick-select buttons that select geographic regions (west/central/east/all)
@@ -397,6 +445,10 @@ function setupRegionButtons(counties, byFips, getFipsFromFeature) {
   });
 }
 
+// Quick-select geographic regions (west/central/east) by using centroid longitudes.
+// These helpers produce a Set of CountyName strings which is applied as a brushed selection.
+
+
 /**
  * Draw NC map with depression hotspots colored by county
  */
@@ -456,11 +508,8 @@ function drawMap(counties, byFips, getFipsFromFeature, path, color, legendExtent
         .style("opacity", 1)
         .html(`
           <strong>${row.CountyName} County</strong><br/>
-          Depression (age-adj): ${row.DEPRESSION_AdjPrev.toFixed(1)}%<br/>
-          Depression (crude): ${row.DEPRESSION_CrudePrev.toFixed(1)}%<br/>
-          Population: ${row.TotalPopulation.toLocaleString()}<br/>
-          Median income: $${row.MedianIncome.toLocaleString()}<br/>
-          Poverty rate: ${row.PovertyRate.toFixed(1)}%
+          Depression (age-adjusted): ${row.DEPRESSION_AdjPrev.toFixed(1)}%<br/>
+          Depression (crude): ${row.DEPRESSION_CrudePrev.toFixed(1)}%
         `)
         .style("left", (event.pageX + 10) + "px")
         .style("top",  (event.pageY + 10) + "px");
@@ -492,6 +541,10 @@ function drawMap(counties, byFips, getFipsFromFeature, path, color, legendExtent
   // Draw color legend
   drawColorLegend(g, color, legendExtent, w, h, legendTitle);
 }
+
+// Draw the main choropleth map. Each county is filled by the provided color scale.
+// Attaches tooltip, hover, and click behaviors and then calls drawColorLegend.
+
 
 /**
  * Draw color legend for a given scale
@@ -574,6 +627,11 @@ function drawColorLegend(g, color, legendExtent, mapWidth, mapHeight, title) {
   });
 }
 
+// Render a horizontal color ramp legend. If an HTML container `#map-legend` exists,
+// draw the legend there (gives more layout control); otherwise fall back to drawing
+// inside the SVG group passed in.
+
+
 /**
  * Update the details panel
  */
@@ -589,6 +647,10 @@ function updateCountyDetails(row) {
     <p><strong>Bachelor's degree or higher:</strong> ${row.BAplusPercent.toFixed(1)}%</p>
   `);
 }
+
+// Fill the details panel under the map with a concise set of stats for the
+// selected county. The panel is scrollable if there are many fields.
+
 
 /**
  * Draw all scatterplots
@@ -620,6 +682,10 @@ function drawAllScatters(rows) {
     tooltipValue: d => `${d.BAplusPercent.toFixed(1)}%`
   });
 }
+
+// Create the three scatterplots (each compares a factor vs depression).
+// This function delegates to drawScatter for each variable of interest.
+
 
 /**
  * Draw correlation scatterplot: depression vs various factors
@@ -698,8 +764,8 @@ function drawScatter(rows, tabName, svg, config) {
         .style("opacity", 1)
         .html(`
           <strong>${d.CountyName} County</strong><br/>
-          Depression: ${d.DEPRESSION_AdjPrev.toFixed(1)}%<br/>
-          ${config.xLabel.split(" (")[0]}: ${config.tooltipValue(d)}
+          Depression (age-adjusted): ${d.DEPRESSION_AdjPrev.toFixed(1)}%<br/>
+          Depression (crude): ${d.DEPRESSION_CrudePrev.toFixed(1)}%
         `)
         .style("left", (event.pageX + 10) + "px")
         .style("top",  (event.pageY + 10) + "px");
@@ -756,6 +822,11 @@ function drawScatter(rows, tabName, svg, config) {
     .call(brush);
 }
 
+// Draw a single scatterplot of depression vs a chosen x-variable.
+// - Shows points, axes, and axis labels.
+// - Supports click selection (when not brushing) and a brush for cluster selection.
+
+
 /**
  * Setup tab switching
  */
@@ -784,6 +855,9 @@ function setupTabs() {
     });
   });
 }
+
+// Tab switching for the older scatter-panel UI: select which scatter tab is active.
+
 
 /**
  * Highlight scatterpoint when its county is selected on map
@@ -832,3 +906,7 @@ function highlightScatter(countyName) {
       .attr("stroke-width", isSel ? 3 : 0.5);
   });
 }
+
+// Highlight a single county consistently across the map and all scatterplots.
+// Passing a falsy `countyName` clears the selection and resets visuals.
+
