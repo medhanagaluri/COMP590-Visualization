@@ -125,6 +125,103 @@
       max-width: 260px;
     }
 
+    /*Info icon styling for interactive feature descriptions*/
+    .info-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #3182bd;
+      color: white;
+      font-size: 11px;
+      font-weight: bold;
+      font-style: normal;
+      cursor: help;
+      margin-left: 6px;
+      vertical-align: middle;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .info-icon:hover {
+      background: #2563eb;
+    }
+
+    /*Info tooltip styling - positioned fixed to avoid clipping in scrollable panels*/
+    .info-tooltip {
+      position: fixed;
+      background: #333;
+      color: white;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      z-index: 10000;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      max-width: 320px;
+      min-width: 200px;
+      white-space: normal;
+      line-height: 1.4;
+      bottom: auto;
+      top: auto;
+      left: auto;
+      transform: none;
+    }
+
+    .info-icon:hover .info-tooltip {
+      opacity: 1;
+    }
+
+    /*Tooltip positioned below icon when not enough space above*/
+    .info-tooltip.tooltip-below {
+      bottom: auto;
+      top: calc(100% + 8px);
+      transform: translateX(-50%);
+    }
+
+    /*Tooltip positioned to the left when would go off screen*/
+    .info-tooltip.tooltip-left {
+      left: auto;
+      right: 0;
+      transform: none;
+    }
+
+    /*Tooltip positioned to the right when would go off screen*/
+    .info-tooltip.tooltip-right {
+      left: 0;
+      transform: none;
+    }
+
+    /*Arrow for tooltip pointing to icon*/
+    .info-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: #333;
+    }
+
+    /*Arrow pointing up when tooltip is below icon*/
+    .info-tooltip.tooltip-below::after {
+      top: auto;
+      bottom: 100%;
+      border-top-color: transparent;
+      border-bottom-color: #333;
+    }
+    
+    /*Arrow stays centered when tooltip is adjusted horizontally*/
+    .info-tooltip.tooltip-left::after,
+    .info-tooltip.tooltip-right::after {
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
   /* Sidebar styling (formula and graphs tab) */
   .sidebar-tab { font-weight: 700; color: #000; font-size:14px; background: transparent; }
   .sidebar-tab.active { background:#3182bd; color:white; }
@@ -145,9 +242,20 @@
   <div id="main-content">
     <div id="map-container">
       <!-- Map title -->
-  <h2 id="map-title">NC Depression Hotspots</h2>
+  <h2 id="map-title" style="display:flex; align-items:center; justify-content:center; gap:6px;">
+    NC Depression Hotspots
+    <span class="info-icon" data-tooltip="Click any county to view detailed statistics.">
+      i
+      <span class="info-tooltip">Click any county to view detailed statistics.</span>
+    </span>
+  </h2>
   <!-- Region quick-select buttons -->
-  <div id="region-controls"></div>
+  <div id="region-controls" style="position:relative;">
+    <span class="info-icon" style="position:absolute; top:8px; right:16px;" data-tooltip="Quickly select counties by region or select all at once.">
+      i
+      <span class="info-tooltip">Quickly select counties by region or select all at once.</span>
+    </span>
+  </div>
       <!-- Map legen scale -->
       <div id="map-legend" style="padding:8px 16px; background:#fff; border-bottom:1px solid #eee; display:flex; align-items:center;">
       </div>
@@ -165,9 +273,13 @@
 
     <div id="sidebar">
       <!-- Tabs to switch between Formula and Graphs-->
-      <div id="sidebar-tabs" style="display:flex; gap:8px; padding:12px; border-bottom:1px solid #eee;">
+      <div id="sidebar-tabs" style="display:flex; gap:8px; padding:12px; border-bottom:1px solid #eee; align-items:center; position:relative;">
         <button id="tab-formula" class="sidebar-tab" style="flex:1; padding:8px; border:1px solid #e0e0e0; cursor:pointer;">Formula</button>
         <button id="tab-graphs" class="sidebar-tab" style="flex:1; padding:8px; border:1px solid #e0e0e0; cursor:pointer;">Graphs</button>
+        <span class="info-icon" style="margin-left:4px;" data-tooltip="Switch between Formula view to customize calculations for Needs Index or Graphs view to explore data.">
+          i
+          <span class="info-tooltip">Switch between Formula view to customize calculations for Needs Index or Graphs view to explore data.</span>
+        </span>
       </div>
 
       <!-- Formula panel -->
@@ -175,6 +287,10 @@
         <div id="needs-index-controls">
           <div style="display:flex; align-items:center;">
             <h3 style="margin:0;">Needs Index (formula)</h3>
+            <span class="info-icon" data-tooltip="Select variables and adjust weights to create a custom Needs Index, then click Apply to update the map.">
+              i
+              <span class="info-tooltip">Select variables and adjust weights to create a custom Needs Index, then click Apply to update the map.</span>
+            </span>
           </div>
           <div id="needs-index-content" style="margin-top:8px;">
             <p style="margin:0 0 8px 0; font-size:12px; color:#555;">Choose variables to include and adjust their relative weights. Weights are normalized automatically.</p>
@@ -212,9 +328,21 @@
 
       <!-- Graphs panel with scatterplots stacked vertically and scrollable -->
       <div id="panel-graphs" style="display:none; padding:12px;">
-        <div id="selection-mode-controls" style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-          <button id="mode-individual" type="button" style="padding:6px 10px; border:1px solid #ccc; background:#3182bd; color:white; cursor:pointer;">Individual select</button>
-          <button id="mode-cluster" type="button" style="padding:6px 10px; border:1px solid #ccc; background:white; cursor:pointer;">Select clusters</button>
+        <div id="selection-mode-controls" style="display:flex; gap:8px; align-items:center; margin-bottom:8px; position:relative;">
+          <div style="display:flex; align-items:center; gap:4px;">
+            <button id="mode-individual" type="button" style="padding:6px 10px; border:1px solid #ccc; background:#3182bd; color:white; cursor:pointer;">Individual select</button>
+            <span class="info-icon" data-tooltip="Click a data point to select a single county and view its details.">
+              i
+              <span class="info-tooltip">Click a data point to select a single county and view its details.</span>
+            </span>
+          </div>
+          <div style="display:flex; align-items:center; gap:4px;">
+            <button id="mode-cluster" type="button" style="padding:6px 10px; border:1px solid #ccc; background:white; cursor:pointer;">Select clusters</button>
+            <span class="info-icon" data-tooltip="Drag to brush and select multiple counties at once to view concentrated data.">
+              i
+              <span class="info-tooltip">Drag to brush and select multiple counties at once to view concentrated data.</span>
+            </span>
+          </div>
         </div>
         <div id="graphs-scroll" style="max-height: calc(100vh - 160px); overflow-y: auto; display:flex; flex-direction:column; gap:12px;">
           <div class="scatter-panel" id="scatter-income">
@@ -234,5 +362,114 @@
   <!-- Connect D3 and JS to the page to add functionality and draw visualizations after page loads -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
   <script src="js/app.js"></script>
+  <script>
+    //Position tooltips dynamically to keep them within viewport bounds
+    window.positionTooltip = function positionTooltip(icon, tooltip) {
+      //Make tooltip visible temporarily to measure its size
+      const wasVisible = tooltip.style.opacity !== '0';
+      const originalDisplay = tooltip.style.display;
+      if (!wasVisible) {
+        tooltip.style.opacity = '1';
+        tooltip.style.visibility = 'hidden';
+        tooltip.style.display = 'block';
+      }
+      
+      const iconRect = icon.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const padding = 10;
+      
+      //Reset positioning classes and styles
+      tooltip.classList.remove('tooltip-below', 'tooltip-left', 'tooltip-right');
+      tooltip.style.top = '';
+      tooltip.style.bottom = '';
+      tooltip.style.left = '';
+      tooltip.style.transform = '';
+      
+      //Force layout calculation to measure tooltip size
+      void tooltip.offsetHeight;
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const tooltipHeight = tooltipRect.height;
+      const tooltipWidth = tooltipRect.width;
+      
+      //Check available space above and below icon
+      const spaceAbove = iconRect.top;
+      const spaceBelow = viewportHeight - iconRect.bottom;
+      
+      //Calculate icon center for horizontal positioning
+      const iconCenterX = iconRect.left + iconRect.width / 2;
+      const halfTooltipWidth = tooltipWidth / 2;
+      
+      //Position tooltip above icon if space available, otherwise below
+      let verticalPos;
+      if (spaceAbove >= tooltipHeight + padding) {
+        verticalPos = iconRect.top - tooltipHeight - 8;
+        tooltip.style.bottom = 'auto';
+        tooltip.style.top = verticalPos + 'px';
+      } else {
+        verticalPos = iconRect.bottom + 8;
+        tooltip.style.top = verticalPos + 'px';
+        tooltip.style.bottom = 'auto';
+        tooltip.classList.add('tooltip-below');
+      }
+      
+      //Center tooltip on icon horizontally, adjust if would go off screen
+      let horizontalPos = iconCenterX - halfTooltipWidth;
+      if (horizontalPos < padding) {
+        horizontalPos = padding;
+        tooltip.classList.add('tooltip-left');
+      } else if (horizontalPos + tooltipWidth > viewportWidth - padding) {
+        horizontalPos = viewportWidth - padding - tooltipWidth;
+        tooltip.classList.add('tooltip-right');
+      }
+      
+      tooltip.style.left = horizontalPos + 'px';
+      
+      //Restore original visibility state
+      if (!wasVisible) {
+        tooltip.style.visibility = '';
+        tooltip.style.opacity = '';
+        if (originalDisplay) {
+          tooltip.style.display = originalDisplay;
+        } else {
+          tooltip.style.display = '';
+        }
+      }
+    }
+    
+    //Set up tooltip positioning for all info icons on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      const infoIcons = document.querySelectorAll('.info-icon');
+      
+      infoIcons.forEach(icon => {
+        const tooltip = icon.querySelector('.info-tooltip');
+        if (!tooltip) return;
+        
+        //Position tooltip when user hovers over icon
+        icon.addEventListener('mouseenter', function() {
+          requestAnimationFrame(() => {
+            positionTooltip(icon, tooltip);
+          });
+        });
+        
+        //Reposition tooltip on window resize or scroll
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+          clearTimeout(resizeTimeout);
+          resizeTimeout = setTimeout(() => {
+            if (icon.matches(':hover')) {
+              positionTooltip(icon, tooltip);
+            }
+          }, 100);
+        });
+        
+        window.addEventListener('scroll', () => {
+          if (icon.matches(':hover')) {
+            positionTooltip(icon, tooltip);
+          }
+        }, true);
+      });
+    });
+  </script>
 </body>
 </html>

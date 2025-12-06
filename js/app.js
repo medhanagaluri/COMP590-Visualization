@@ -522,17 +522,33 @@ function drawColorLegend(g, color, legendExtent, mapWidth, mapHeight, title) {
 
 
 // Update details panel with selected county stats
+//Update county details panel with selected county stats and add info icons for each statistic
 function updateCountyDetails(row) {
   detailsTitle.text(`${row.CountyName} County`);
   detailsBox.html(`
-    <p><strong>Needs index:</strong> ${row.NeedsIndex != null ? row.NeedsIndex.toFixed(2) + '/10' : 'N/A'}</p>
-    <p><strong>Depression (age-adjusted):</strong> ${row.DEPRESSION_AdjPrev.toFixed(1)}%</p>
-    <p><strong>Depression (crude):</strong> ${row.DEPRESSION_CrudePrev.toFixed(1)}%</p>
-    <p><strong>Total population:</strong> ${row.TotalPopulation.toLocaleString()}</p>
-    <p><strong>Median income:</strong> $${row.MedianIncome.toLocaleString()}</p>
-    <p><strong>Poverty rate:</strong> ${row.PovertyRate.toFixed(1)}%</p>
-    <p><strong>Bachelor's degree or higher:</strong> ${row.BAplusPercent.toFixed(1)}%</p>
+    <p><strong>Needs index:</strong> ${row.NeedsIndex != null ? row.NeedsIndex.toFixed(2) + '/10' : 'N/A'} <span class="info-icon" style="margin-left:4px;">i<span class="info-tooltip">Custom composite score (0-10) combining income, education, depression, and poverty rates. Higher values indicate greater need.</span></span></p>
+    <p><strong>Depression (age-adjusted):</strong> ${row.DEPRESSION_AdjPrev.toFixed(1)}% <span class="info-icon" style="margin-left:4px;">i<span class="info-tooltip">Percentage of adults with depression, adjusted for age distribution to allow fair comparison across counties.</span></span></p>
+    <p><strong>Depression (crude):</strong> ${row.DEPRESSION_CrudePrev.toFixed(1)}% <span class="info-icon" style="margin-left:4px;">i<span class="info-tooltip">Raw percentage of adults with depression, not adjusted for age differences between counties.</span></span></p>
+    <p><strong>Total population:</strong> ${row.TotalPopulation.toLocaleString()} <span class="info-icon" style="margin-left:4px;">i<span class="info-tooltip">Total number of residents in the county.</span></span></p>
+    <p><strong>Median income:</strong> $${row.MedianIncome.toLocaleString()} <span class="info-icon" style="margin-left:4px;">i<span class="info-tooltip">Middle value of household income, where half of households earn more and half earn less.</span></span></p>
+    <p><strong>Poverty rate:</strong> ${row.PovertyRate.toFixed(1)}% <span class="info-icon" style="margin-left:4px;">i<span class="info-tooltip">Percentage of population living below the federal poverty threshold.</span></span></p>
+    <p><strong>Bachelor's degree or higher:</strong> ${row.BAplusPercent.toFixed(1)}% <span class="info-icon" style="margin-left:4px;">i<span class="info-tooltip">Percentage of adults (25+) who have completed at least a bachelor's degree.</span></span></p>
   `);
+  
+  //Set up tooltip positioning for dynamically added info icons
+  const newInfoIcons = detailsBox.node().querySelectorAll('.info-icon');
+  newInfoIcons.forEach(icon => {
+    const tooltip = icon.querySelector('.info-tooltip');
+    if (tooltip) {
+      icon.addEventListener('mouseenter', function() {
+        requestAnimationFrame(() => {
+          if (window.positionTooltip) {
+            window.positionTooltip(icon, tooltip);
+          }
+        });
+      });
+    }
+  });
 }
 
 
